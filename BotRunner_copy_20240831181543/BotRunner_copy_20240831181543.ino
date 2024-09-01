@@ -1,10 +1,19 @@
-// IO CONFIGURATION
-const int hallSensorPin = 3;
-// Does nothing but provide 5V to the hall effect sensor.
-const int hallEffectVoltagePin = 4;
+// Digital pins.
+#define PIN_IR_LEFT 2
+#define PIN_IR_CENTER 4
+#define PIN_IR_RIGHT 5
+#define PIN_HALL_EFFECT_LEFT 6
+#define PIN_HALL_EFFECT_RIGHT 7
+#define PIN_LASER_POWER 8
+#define PIN_MOTOR_LEFT 3
+#define PIN_MOTOR_RIGHT 9
+// Analog pins.
+#define PIN_LASER_READER 0
 
-// How many rotations to hold onto in the motor.
-const int ROTATIONS_COLLECTED = 100;
+// Configs.
+#define ROTATIONS_COLLECTED 100
+
+
 uint64_t lastTime = 0;
 
 struct Wheel {
@@ -22,7 +31,7 @@ struct Wheel {
     int count = 0;
 
     // Circuluar access to last node.
-    int i = index-1;
+    int i = index - 1;
     if (i < 0) i += ROTATIONS_COLLECTED;
 
     uint64_t min_time = now - window;
@@ -71,14 +80,10 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Let's go!");
 
-  // Set up the Hall effect sensor pin
-  pinMode(hallSensorPin, INPUT);
-  pinMode(hallEffectVoltagePin, OUTPUT);
+  // Set up the Hall effect sensor pin.
+  pinMode(PIN_HALL_EFFECT_LEFT, INPUT);
 
-  // Setup the pins.
-  digitalWrite(hallEffectVoltagePin, HIGH);
-
-  attachInterrupt(digitalPinToInterrupt(hallSensorPin), leftInterrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_LEFT), leftInterrupt, FALLING);
 }
 
 // AI told me this is how I print a uint64.
