@@ -21,6 +21,9 @@
 #define SERVO_FULL_REVERSE 1420  // 1000
 #define SERVO_FULL_FORWARD 1620  // 2000
 
+#define DEBUG_WRITE_SAMPLE_RATE 1000
+#define CONTROLLER_SAMPLE_RATE 100
+
 // Define State Machine.
 enum PathState {
   START,
@@ -38,9 +41,9 @@ enum PathState {
 };
 PathState currentPathState = START;
 
-// Debug printer:
 // The last time that a Serial.print was made.
-uint32_t lastTime = 0;
+uint32_t lastPrintTime = 0;
+uint32_t lastExecTime = 0;
 
 struct InfraredWrapper {
   int pin = -1;
@@ -220,7 +223,7 @@ void moveForward() {
   rightWheel.setSpeed(1);
 };
 
-void executeDefaultLineRider() {
+void executeDefaultLineRider(uint32_t timeSinceStart) {
   if (rightIr.isBlack && leftIr.isBlack) {
     moveStop();
     return;
@@ -236,21 +239,32 @@ void executeDefaultLineRider() {
   moveForward();
 }
 
-void executeStateMachine() {
+void executeStateMachine(uint32_t timeSinceStart) {
   switch (currentPathState) {
     case START:
-      executeDefaultLineRider();
+      executeDefaultLineRider(timeSinceStart);
       break;
   }
 }
 
 void loop() {
-  executeStateMachine();
+  uint64_t now_full = millis();
+  uint32_t now = now_full & 0xFFFFFFFF;
+  // When time overflows, reset counters to 0.
+  if (now < now_full) {
+    lastExecTime = 0;
+    lastPrintTime = 0;
+  }
+
+  if ((now - lastExecTime) >= DEBUG_WRITE_SAMPLE_RATE) {
+    int timeSinceStart = now - lastExecTime;
+    executeStateMachine(timeSinceStart);
+    lastExecTime = now;
+  }
 
   // Only give a status update every second.
-  uint32_t now = millis() % 0xFFFFFFFF;
-  if ((now - lastTime) >= 1000) {
+  if ((now - lastPrintTime) >= DEBUG_WRITE_SAMPLE_RATE) {
     printDebugUpdate(now);
-    lastTime = now;
+    lastPrintTime = now;
   }
 }
