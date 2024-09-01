@@ -26,14 +26,8 @@ int sensor2Value = 0;
 
 // Setup ------------------
 void setup() {
-  if (lMotor.attach(9) != 9) {
-    Serial.println("PIN 9 ATTACH FAIL");
-    delay(1000);
-  }
-  if (rMotor.attach(3) != 3) {
-    Serial.println("PIN 3 ATTACH FAIL");
-    delay(1000);
-  }
+  lMotor.attach(9);
+  rMotor.attach(3);
   pinMode(irSensorLPin, INPUT);
   pinMode(irSensorRPin, INPUT);
   Serial.begin(9600);
@@ -56,6 +50,11 @@ void loop() {
   int RS = digitalRead(irSensorRPin);
   int LS = digitalRead(irSensorLPin);
 
+  Serial.print("LS: ");
+  Serial.print(LS);
+  Serial.print(" RS: ");
+  Serial.print(RS);
+
   if ((RS == 0) && (LS == 0)) { forward(); }
   if ((RS == 1) && (LS == 0)) { turnRight(); }
   if ((RS == 0) && (LS == 1)) { turnLeft(); }
@@ -65,22 +64,31 @@ void loop() {
 }
 
 
+// Motor constants.
+#define SERVO_STOP 1520
+// Temporarily gate range to safer numbers:
+#define SERVO_FULL_REVERSE 1480  // 1000
+#define SERVO_REVERSE_RANGE -520
+#define SERVO_FULL_FORWARD 1600  // 2000
+#define SERVO_FORWARD_RANGE 480
+
 void forward() {  //forward
-  lMotor.writeMicroseconds(1580);
-  rMotor.writeMicroseconds(1580);
+  lMotor.writeMicroseconds(SERVO_FULL_FORWARD);
+  rMotor.writeMicroseconds(SERVO_FULL_FORWARD);
 }
 
 void turnRight() {  //turnRight
-  lMotor.writeMicroseconds(1600);
-  rMotor.writeMicroseconds(1460);
+  lMotor.writeMicroseconds(SERVO_FULL_FORWARD);
+  rMotor.writeMicroseconds(SERVO_FULL_REVERSE);
 }
 
 void turnLeft() {  //turnLeft
-  lMotor.writeMicroseconds(1460);
-  rMotor.writeMicroseconds(1600);
+  lMotor.writeMicroseconds(SERVO_FULL_REVERSE);
+  rMotor.writeMicroseconds(SERVO_FULL_FORWARD);
 }
 
 void Stop() {
-  lMotor.writeMicroseconds(1650);
-  rMotor.writeMicroseconds(1489);
+  // Loop in a circle?
+  lMotor.writeMicroseconds(SERVO_STOP);
+  rMotor.writeMicroseconds(SERVO_STOP);
 }
