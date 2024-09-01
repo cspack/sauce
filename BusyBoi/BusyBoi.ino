@@ -7,22 +7,23 @@
 #define PIN_HALL_EFFECT_LEFT 7
 #define PIN_HALL_EFFECT_RIGHT 8
 #define PIN_LASER_POWER 10
-#define PIN_MOTOR_LEFT 3
-#define PIN_MOTOR_RIGHT 9
+#define PIN_MOTOR_LEFT 9
+#define PIN_MOTOR_RIGHT 3
 // Analog pins.
 #define PIN_LASER_READER 0
 
 // Configs.
 #define ROTATIONS_COLLECTED 10
 
+#define RUN_MOTORS true
 // Motor constants.
 #define SERVO_STOP 1520
 // Temporarily gate range to safer numbers:
-#define SERVO_FULL_REVERSE 1420  // 1000
-#define SERVO_FULL_FORWARD 1620  // 2000
+#define SERVO_FULL_REVERSE 1200  // 1000
+#define SERVO_FULL_FORWARD 1800  // 2000
 
 #define DEBUG_WRITE_SAMPLE_RATE 1000
-#define CONTROLLER_SAMPLE_RATE 100
+#define CONTROLLER_SAMPLE_RATE 1
 
 // Define State Machine.
 enum PathState {
@@ -52,7 +53,7 @@ struct InfraredWrapper {
   uint32_t flippedAt = 0;
   // Assume that the interrupt handles both directions of type CHANGE.
   void handleChange() {
-    isBlack = !isBlack;
+    isBlack = digitalRead(pin);
     flippedAt = millis();
   }
 };
@@ -63,36 +64,46 @@ struct Wheel {
   int pinHallEffect = -1;
   // Revolution collector:
   // The collection of timestamps of last revolutions.
-  uint32_t ticks[ROTATIONS_COLLECTED];
+  uint32_t myTicks[ROTATIONS_COLLECTED];
   // The position to insert the next revolution.
   int index = 0;
   // The global revolutions for this motor since reset.
   int tickCount = 0;
   // Motor controller.
-  Servo servo;
+  Servo* myServo;
 
   void recordTick() {
     tickCount++;
-    ticks[index] = millis() % 0xFFFFFFFF;
+    myTicks[index] = millis() % 0xFFFFFFFF;
     index = (++index) % ROTATIONS_COLLECTED;
   }
 
+  #define EPSILON 0.00001
+  bool areSame(double a, double b) {
+    return fabs(a - b) < EPSILON;
+    ;
+  }
+
+
   // sets the servo speed: range -1 to 1.
   void setSpeed(double rate) {
+    if (!RUN_MOTORS) {
+      return;
+    }
     // Fast base cases:
-    if (rate == 0.0) {
-      servo.writeMicroseconds(SERVO_STOP);
+    if (areSame(rate, 0.0)) {
+      myServo->writeMicroseconds(SERVO_STOP);
     }
-    if (rate == 1.0) {
-      servo.writeMicroseconds(SERVO_FULL_FORWARD);
+    if (areSame(rate, 1.0)) {
+      myServo->writeMicroseconds(SERVO_FULL_FORWARD);
     }
-    if (rate == -1.0) {
-      servo.writeMicroseconds(SERVO_FULL_REVERSE);
+    if (areSame(rate, -1.0)) {
+      myServo->writeMicroseconds(SERVO_FULL_REVERSE);
     }
-    if (rate > 0) {
-      servo.writeMicroseconds(SERVO_STOP + rate * SERVO_FULL_FORWARD);
+    if (rate > 0.0) {
+      myServo->writeMicroseconds(SERVO_STOP + (rate * abs(SERVO_FULL_FORWARD - SERVO_STOP)));
     } else {
-      servo.writeMicroseconds(SERVO_STOP + rate * SERVO_FULL_REVERSE);
+      myServo->writeMicroseconds(SERVO_STOP - (rate * abs(SERVO_STOP - SERVO_FULL_REVERSE)));
     }
   }
 
@@ -108,7 +119,7 @@ struct Wheel {
       return 0;
 
     while (true) {
-      if (ticks[i] >= min_time) {
+      if (myTicks[i] >= min_time) {
         count++;
         if (count > ROTATIONS_COLLECTED) {
           // FUCK!
@@ -127,15 +138,15 @@ struct Wheel {
 };
 
 void initWheel(Wheel& wheel, int pin_servo, int pin_hall_effect) {
-  wheel.pinServo = pin_servo;
-  wheel.pinHallEffect = pin_hall_effect;
+  Serial.print("Initializing Wheel/servo on pin ");
+  Serial.println(pin_servo);
+  // wheel.pinServo = pin_servo;
+  // wheel.pinHallEffect = pin_hall_effect;
+
   // Setup Struct.
   wheel.index = 0;
   wheel.tickCount = 0;
-  for (int i = 0; i < sizeof(wheel.ticks); i++) wheel.ticks[i] = -1;
-
-  // Attach servo monitor.
-  wheel.servo.attach(pin_servo);
+  for (int i = 0; i < sizeof(wheel.myTicks); i++) wheel.myTicks[i] = -1;
 }
 // Instances of wheel.
 Wheel leftWheel;
@@ -169,7 +180,25 @@ void recieveIrRight() {
   rightIr.handleChange();
 }
 
+Servo leftServo;
+Servo rightServo;
+
 void setup() {
+  Serial.begin(9600);
+
+  leftServo.attach(PIN_MOTOR_LEFT);
+  rightServo.attach(PIN_MOTOR_RIGHT);
+  leftWheel.myServo = &leftServo;
+  rightWheel.myServo = &rightServo;
+  if (!leftServo.attached()) {
+      Serial.println("Left servo failed attach.");
+      delay(10000);
+  }
+  if (!rightServo.attached()) {
+      Serial.println("Right servo failed attach.");
+      delay(10000);
+  }
+
   // Set up wheel servos.
   initWheel(leftWheel, PIN_MOTOR_LEFT, PIN_HALL_EFFECT_LEFT);
   initWheel(rightWheel, PIN_MOTOR_RIGHT, PIN_HALL_EFFECT_RIGHT);
@@ -178,24 +207,53 @@ void setup() {
   initIrSensor(leftIr, PIN_IR_LEFT);
   initIrSensor(centerIr, PIN_IR_CENTER);
   initIrSensor(rightIr, PIN_IR_RIGHT);
-  attachInterrupt(digitalPinToInterrupt(PIN_IR_LEFT), recieveIrLeft, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PIN_IR_CENTER), recieveIrCenter, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PIN_IR_RIGHT), recieveIrRight, CHANGE);
+  /*
+  if (digitalPinToInterrupt(PIN_IR_LEFT) < 0) {
+    Serial.println("NO INTERRUPT ON PIN PIN_IR_LEFT");
+  } else {
+    attachInterrupt(digitalPinToInterrupt(PIN_IR_LEFT), recieveIrLeft, CHANGE);
+  }
+  if (digitalPinToInterrupt(PIN_IR_CENTER) < 0) {
+    Serial.println("NO INTERRUPT ON PIN PIN_IR_CENTER");
+  } else {
+    attachInterrupt(digitalPinToInterrupt(PIN_IR_CENTER), recieveIrCenter, CHANGE);
+  }
+  if (digitalPinToInterrupt(PIN_IR_RIGHT) < 0) {
+    Serial.println("NO INTERRUPT ON PIN PIN_IR_RIGHT");
+  } else {
+    attachInterrupt(digitalPinToInterrupt(PIN_IR_RIGHT), recieveIrRight, CHANGE);
+  }*/
 
+  /*
   // Set up the Hall Effect Sensors.
   pinMode(PIN_HALL_EFFECT_LEFT, INPUT);
-  pinMode(PIN_HALL_EFFECT_RIGHT, INPUT);
+  pinMode(PIN_HALL_EFFECT_RIGHT, INPUT);*/
   // Attach hall effect sensor.
-  attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_LEFT), recieveHallEffectLeft, FALLING);
-  attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_RIGHT), recieveHallEffectRight, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_LEFT), recieveHallEffectLeft, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_RIGHT), recieveHallEffectRight, FALLING);
 
-  Serial.begin(9600);
   Serial.println("Let's go!");
 }
 
 void printDebugUpdate(uint32_t now) {
   Serial.print("[1s @");
   Serial.print(now);
+  Serial.print("] sensor L:");
+  Serial.print(leftIr.isBlack ? "Y" : "N");
+  Serial.print(",C:");
+  Serial.print(centerIr.isBlack ? "Y" : "N");
+  Serial.print(",R:");
+  Serial.print(rightIr.isBlack ? "Y" : "N");
+  Serial.println();
+
+/*
+Serial.print(" LEFT: ");
+  Serial.print(digitalRead(PIN_IR_LEFT));
+  Serial.print(" RIGHT: ");
+  Serial.println(digitalRead(PIN_IR_RIGHT));*/
+
+  // Distance monitoring:
+  /*
   Serial.print("] left wheel ∑:");
   Serial.print(leftWheel.tickCount);
   Serial.print(" Δ:");
@@ -203,30 +261,35 @@ void printDebugUpdate(uint32_t now) {
   Serial.print("right wheel ∑:");
   Serial.print(rightWheel.tickCount);
   Serial.print(" Δ:");
-  Serial.print(rightWheel.countTicks(now, 1000));
+  Serial.println(rightWheel.countTicks(now, 1000));
+  */
 }
 
 void moveStop() {
-  leftWheel.setSpeed(0);
-  rightWheel.setSpeed(0);
+  leftWheel.setSpeed(-0.2);
+  rightWheel.setSpeed(-0.2);
 };
 void moveLeft() {
-  leftWheel.setSpeed(-1);
-  rightWheel.setSpeed(1);
+  leftWheel.setSpeed(-1.0);
+  rightWheel.setSpeed(1.0);
 };
 void moveRight() {
-  leftWheel.setSpeed(1);
-  rightWheel.setSpeed(-1);
+  leftWheel.setSpeed(1.0);
+  rightWheel.setSpeed(-1.0);
 };
 void moveForward() {
-  leftWheel.setSpeed(1);
-  rightWheel.setSpeed(1);
+  leftWheel.setSpeed(1.0);
+  rightWheel.setSpeed(1.0);
 };
 
 void executeDefaultLineRider(uint32_t timeSinceStart) {
-  if (rightIr.isBlack && leftIr.isBlack) {
-    moveStop();
+  // Silent debug.
+  if (!RUN_MOTORS) {
     return;
+  }
+
+  if (rightIr.isBlack && leftIr.isBlack) {
+      moveForward();
   }
   if (leftIr.isBlack) {
     moveRight();
@@ -247,16 +310,18 @@ void executeStateMachine(uint32_t timeSinceStart) {
   }
 }
 
-void loop() {
-  uint64_t now_full = millis();
-  uint32_t now = now_full & 0xFFFFFFFF;
-  // When time overflows, reset counters to 0.
-  if (now < now_full) {
-    lastExecTime = 0;
-    lastPrintTime = 0;
-  }
+void refreshSensors() {
+  leftIr.handleChange();
+  centerIr.handleChange();
+  rightIr.handleChange();
+}
 
-  if ((now - lastExecTime) >= DEBUG_WRITE_SAMPLE_RATE) {
+void loop() {
+  uint32_t now = millis() & 0xFFFFFFFF;
+
+  if ((now - lastExecTime) >= CONTROLLER_SAMPLE_RATE) {
+    refreshSensors();
+
     int timeSinceStart = now - lastExecTime;
     executeStateMachine(timeSinceStart);
     lastExecTime = now;
