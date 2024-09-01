@@ -16,8 +16,20 @@
 // State Machine
 enum PathState {
   START,
+  CHECKPOINT_ONE,
+  CHECKPOINT_TWO,
+  BROOM_STICK_BEGIN,
+  BROOM_STICK_ABYSS,
+  JUMP_EXIT_LANE,
+  DO_A_FLIP,
+  FIND_THE_LINE,
+  RED_LINE_RIDER,
+  INVERTED_CUP_STRAIGHT,
+  INVERTED_CUP_RIGHT,
+  FINISH
+};
 
-}
+PathState currentPathState = START;
 
 uint64_t lastTime = 0;
 
@@ -99,10 +111,7 @@ void printUint64(uint64_t value) {
   Serial.print(low, HEX);
 }
 
-void loop() {
-  // Only give a status update every second.
-  uint64_t now = millis();
-  if ((now - lastTime) >= 1000) {
+void printDebugUpdate(uint64_t now) {
     Serial.print("[1s @");
     printUint64(now);
     Serial.print("] left ticks: ");
@@ -110,6 +119,26 @@ void loop() {
     Serial.print(left.countTicks(now, 1000));
     Serial.print(" right ticks: ");
     Serial.println(right.countTicks(now, 1000));
+}
+
+void executeDefaultLineRider() {
+  // TODO: do something!
+}
+
+void executeStateMachine() {
+  switch (currentPathState) {
+    default:
+      
+  }
+}
+
+void loop() {
+  executeStateMachine();
+
+  // Only give a status update every second.
+  uint64_t now = millis();
+  if ((now - lastTime) >= 1000) {
+    printDebugUpdate(now);
     lastTime = now;
   }
 }
