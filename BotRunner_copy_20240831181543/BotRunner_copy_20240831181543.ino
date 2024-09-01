@@ -1,6 +1,7 @@
 // IO CONFIGURATION
 const int hallSensorPin = 3;
-const int hallLedPin = 4;
+// Does nothing but provide 5V to the hall effect sensor.
+const int hallEffectVoltagePin = 4;
 
 // How many rotations to hold onto in the motor.
 const int ROTATIONS_COLLECTED = 100;
@@ -63,9 +64,6 @@ void rightInterrupt() {
   right.recordTick();
 }
 
-void hallInterrupt() {
-}
-
 void setup() {
   initWheel(left);
   initWheel(right);
@@ -75,14 +73,15 @@ void setup() {
 
   // Set up the Hall effect sensor pin
   pinMode(hallSensorPin, INPUT);
-  pinMode(hallLedPin, OUTPUT);
+  pinMode(hallEffectVoltagePin, OUTPUT);
 
-  // Zero out things.
-  digitalWrite(hallLedPin, HIGH);
+  // Setup the pins.
+  digitalWrite(hallEffectVoltagePin, HIGH);
 
   attachInterrupt(digitalPinToInterrupt(hallSensorPin), leftInterrupt, FALLING);
 }
 
+// AI told me this is how I print a uint64.
 void printUint64(uint64_t value) {
   uint32_t high = value >> 32;
   uint32_t low = value & 0xFFFFFFFF;
@@ -91,6 +90,7 @@ void printUint64(uint64_t value) {
 }
 
 void loop() {
+  // Only give a status update every second.
   uint64_t now = millis();
   if ((now - lastTime) >= 1000) {
     Serial.print("[1s @");
