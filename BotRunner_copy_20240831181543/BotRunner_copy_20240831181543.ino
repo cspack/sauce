@@ -1,10 +1,10 @@
 // Digital pins.
-#define PIN_IR_LEFT 2
-#define PIN_IR_CENTER 4
-#define PIN_IR_RIGHT 5
-#define PIN_HALL_EFFECT_LEFT 6
-#define PIN_HALL_EFFECT_RIGHT 7
-#define PIN_LASER_POWER 8
+#define PIN_IR_LEFT 4
+#define PIN_IR_CENTER 5
+#define PIN_IR_RIGHT 6
+#define PIN_HALL_EFFECT_LEFT 7
+#define PIN_HALL_EFFECT_RIGHT 8
+#define PIN_LASER_POWER 10
 #define PIN_MOTOR_LEFT 3
 #define PIN_MOTOR_RIGHT 9
 // Analog pins.
@@ -13,6 +13,11 @@
 // Configs.
 #define ROTATIONS_COLLECTED 100
 
+// State Machine
+enum PathState {
+  START,
+
+}
 
 uint64_t lastTime = 0;
 
