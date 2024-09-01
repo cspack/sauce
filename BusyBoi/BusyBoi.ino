@@ -219,11 +219,6 @@ void moveTightRight() {
   wheelSetSpeed(rightWheel, -1.0);
 };
 void moveForward() {
-  if (goSlow()) {
-    wheelSetSpeed(leftWheel, 0.3);
-    wheelSetSpeed(rightWheel, 0.3);
-    return;
-  }
   // Serial.println("GO FORWARD!");
   wheelSetSpeed(leftWheel, 0.5);
   wheelSetSpeed(rightWheel, 0.5);
@@ -262,25 +257,36 @@ void advanceState(PathState newState, int waitTime = MINIMUM_STATE_WAIT) {
     // RGB Status!
     switch(newState) {
       case CHECKPOINT_ONE:
+      // RED
         writeRgb(true, false, false);
         break;
       case CHECKPOINT_TWO:
+      // GREEN
         writeRgb(false, true, false);
         break;
-      case GET_ON_THE_LINE:
+      case BROOM_STICK_ABYSS:
+        // BLUE
         writeRgb(false, false, true);
+        break;
+      // ORANGE
+      case GET_ON_THE_LINE:
+        writeRgb(true, true, false);
         break;
       case EXIT_TO_THE_RAMP:
         // PINK
         writeRgb(true, false, true);
         break;
       case DO_A_FLIP:
-        // CYAN
-        writeRgb(false, true, true);
-        break;
       case FIND_THE_LINE:
-        // ORANGE
-        writeRgb(true, true, false);
+      case RED_LINE_RIDER:
+      case INVERTED_CUP_STRAIGHT:
+      case INVERTED_CUP_RIGHT:
+        // WHITE
+        writeRgb(true, true, true);
+        break;/*
+      case FIND_THE_LINE:
+        // WHITE
+        writeRgb(true, true, true);
         break;
       case RED_LINE_RIDER:
         writeRgb(true, false, false);
@@ -290,7 +296,7 @@ void advanceState(PathState newState, int waitTime = MINIMUM_STATE_WAIT) {
         break;
       case INVERTED_CUP_RIGHT:
         writeRgb(false, false, true);
-        break;
+        break;*/
     }
 
     lastStateChange = millis_32();
@@ -300,8 +306,27 @@ void advanceState(PathState newState, int waitTime = MINIMUM_STATE_WAIT) {
   }
 }
 
-#define CHECKPOINT_ONE_CROSS_WAIT_TIME 20
-#define CHECKPOINT_TWO_CROSS_WAIT_TIME 20
+int isInHeavenCount = 0;
+bool isReadyForHeaven() {
+  if (isInHeaven()) {
+    isInHeavenCount++;
+  }
+  return isInHeavenCount >= 10;
+}
+
+int isLeavingAbyssCount = 0;
+void resetTheAbyss() {
+  isLeavingAbyssCount = 0;
+}
+bool isReadyForLine() {
+  if (leftIr.isBlack || centerIr.isBlack) {
+    isLeavingAbyssCount++;
+  }
+  return isLeavingAbyssCount >= 10;
+}
+
+#define CHECKPOINT_ONE_CROSS_WAIT_TIME 2000
+#define CHECKPOINT_TWO_CROSS_WAIT_TIME 2000
 void checkpointDetector() {
   if (currentPathState == START) {
     if (isAtACrossRoad()) {
@@ -313,7 +338,7 @@ void checkpointDetector() {
     } else {
       // Evaluate wether hit checkpoint when LEFT the crossroad.
       if (millis_32() - enteredCheckpoint >= CHECKPOINT_ONE_CROSS_WAIT_TIME) {
-        advanceState(CHECKPOINT_ONE);
+        advanceState(CHECKPOINT_ONE, 6000);
       }
       // Reset.
       enteredCheckpoint = 0;
@@ -336,14 +361,16 @@ void checkpointDetector() {
       enteredCheckpoint = 0;
     }
   }
+  
   if (currentPathState == CHECKPOINT_TWO) {
-    if (isInHeaven()) {
-      advanceState(BROOM_STICK_ABYSS);
+    if (isReadyForHeaven()) {
+      advanceState(BROOM_STICK_ABYSS, 30000);
+      resetTheAbyss();
     }
   }
   if (currentPathState == BROOM_STICK_ABYSS) {
-    if (!isInHeaven()) {
-      advanceState(GET_ON_THE_LINE);
+    if (!isReadyForLine()) {
+      advanceState(GET_ON_THE_LINE, 5000);
     }
   }
   if (currentPathState == GET_ON_THE_LINE) {
@@ -360,7 +387,7 @@ void checkpointDetector() {
   }
 }
 
-#define STOP_LEFT_FRAMES_NEEDED 3
+#define STOP_LEFT_FRAMES_NEEDED 4
 int stopLeftInstances = 0;
 int stopLeftFrames = 0;
 void checkAdvance() {
@@ -372,7 +399,7 @@ void checkAdvance() {
     stopLeftInstances++;
     stopLeftFrames = 0;
   }
-  if (stopLeftInstances >= 2) {
+  if (stopLeftInstances >= 3) {
     advanceState(CHECKPOINT_TWO);
   }
 }
@@ -495,22 +522,24 @@ void executeStateMachine() {
   switch (currentPathState) {
     case START:
       executeDefaultLineRider();
-      if (millis_32() - STAGE_ONE_TIME > lastStateChange) {
-        advanceState(CHECKPOINT_ONE);
-      }
       break;
     case CHECKPOINT_ONE:
-      executeDefaultLineRider();
-      break;
-    case CHECKPOINT_TWO:
       executePreferRightLineRider();
       break;
-    case BROOM_STICK_ABYSS:
-      executeVeerRightLineRider();
+    case CHECKPOINT_TWO:
+      executeRideTheRightLineRider();
       break;
+    case BROOM_STICK_ABYSS:
     case GET_ON_THE_LINE:
       executePreferRightLineRider();
       break;
+/*      break;
+    case BROOM_STICK_ABYSS:
+      executeRideTheRightLineRider();
+      break;
+    case GET_ON_THE_LINE:
+      executePreferRightLineRider();
+      break;*/
     case EXIT_TO_THE_RAMP:
       executeVeerLeftLineRider();
       if (millis_32() - 2000 > lastStateChange) {

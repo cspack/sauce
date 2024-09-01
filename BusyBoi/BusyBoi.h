@@ -25,8 +25,8 @@
 // Motor constants.
 #define SERVO_CENTER 1520
 // Temporarily gate range to safer numbers:
-#define SERVO_FORWARD_MULTIPLIER 0.18
-#define SERVO_REVERSE_MULTIPLIER 0.24
+#define SERVO_FORWARD_MULTIPLIER 0.21
+#define SERVO_REVERSE_MULTIPLIER 0.22
 #define SERVO_FULL_REVERSE -520.0  // 1000-1520
 #define SERVO_FULL_FORWARD 480.0   // 2000-1520
 
