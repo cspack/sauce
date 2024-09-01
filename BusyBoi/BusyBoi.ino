@@ -118,9 +118,6 @@ void initIrSensor(InfraredWrapper& irSensor, int irPin, bool reverse) {
 void setup() {
   Serial.begin(9600);
 
-  pinMode(PIN_LASER_POWER, OUTPUT);
-  digitalWrite(PIN_LASER_POWER, HIGH);
-
   // Set up wheel servos.
   leftServo.attach(PIN_MOTOR_LEFT);
   rightServo.attach(PIN_MOTOR_RIGHT);
@@ -143,6 +140,11 @@ void setup() {
   // Set up the Hall Effect Sensors.
   pinMode(PIN_HALL_EFFECT_LEFT, INPUT);
   pinMode(PIN_HALL_EFFECT_RIGHT, INPUT);
+
+  pinMode(PIN_RED, OUTPUT);
+  pinMode(PIN_GREEN, OUTPUT);
+  pinMode(PIN_BLUE, OUTPUT);
+
   Serial.println("Let's a go!");
 }
 
@@ -211,8 +213,8 @@ void inchForward() {
 }
 void moveForward() {
   // Serial.println("GO FORWARD!");
-  wheelSetSpeed(leftWheel, 0.4);
-  wheelSetSpeed(rightWheel, 0.4);
+  wheelSetSpeed(leftWheel, 0.5);
+  wheelSetSpeed(rightWheel, 0.5);
 };
 
 bool isAtACrossRoad() {
@@ -223,6 +225,11 @@ bool isInHeaven() {
   return (!rightIr.isBlack && !leftIr.isBlack && !centerIr.isBlack);
 }
 
+void writeRgb(bool red, bool green, bool blue) {
+  digitalWrite(PIN_RED, red ? HIGH : LOW);
+  digitalWrite(PIN_GREEN, green ? HIGH : LOW);
+  digitalWrite(PIN_BLUE, blue ? HIGH : LOW);
+}
 
 bool isOnTheLine() {
   return (!rightIr.isBlack && !leftIr.isBlack && centerIr.isBlack);
@@ -232,10 +239,46 @@ uint32_t enteredCheckpoint = 0;
 #define MINIMUM_STATE_WAIT 6000
 uint32_t lastStateChange = 0;
 void advanceState(PathState newState, int waitTime = MINIMUM_STATE_WAIT) {
+
   int32_t now = millis_32();
   if (now - waitTime > lastStateChange) {
     Serial.print("STATE CHANGE: ");
     Serial.println(newState);
+
+    // RGB Status!
+    switch(newState) {
+      case CHECKPOINT_ONE:
+        writeRgb(true, false, false);
+        break;
+      case CHECKPOINT_TWO:
+        writeRgb(false, true, false);
+        break;
+      case GET_ON_THE_LINE:
+        writeRgb(false, false, true);
+        break;
+      case EXIT_TO_THE_RAMP:
+        // PINK
+        writeRgb(true, false, true);
+        break;
+      case DO_A_FLIP:
+        // CYAN
+        writeRgb(false, true, true);
+        break;
+      case FIND_THE_LINE:
+        // ORANGE
+        writeRgb(true, true, false);
+        break;
+      case RED_LINE_RIDER:
+        writeRgb(true, false, false);
+        break;
+      case INVERTED_CUP_STRAIGHT:
+        writeRgb(false, true, false);
+        break;
+      case INVERTED_CUP_RIGHT:
+        writeRgb(false, false, true);
+        break;
+    }
+
     lastStateChange = millis_32();
     currentPathState = newState;
     moveStop();
@@ -314,15 +357,15 @@ void checkAdvance() {
 void executeDefaultLineRider() {
   uint32_t now = millis_32();
   if (rightIr.isBlack && leftIr.isBlack) {
-    if (currentPathState == START) {
+    //if (currentPathState == START) {
       moveStop();
       moveLeft();
       checkAdvance();
       return;
-    } else {
+    /*} else {
       inchForward();
       return;
-    }
+    }*/
   } else {
     if (currentPathState == START) {
       stopLeftInstances--;
@@ -341,15 +384,15 @@ void executeDefaultLineRider() {
 
 void executePreferRightLineRider() {
   if (rightIr.isBlack && leftIr.isBlack) {
-    if (currentPathState == START) {
+    //if (currentPathState == START) {
       moveStop();
       moveRight();
       checkAdvance();
-      return;
+      return;/*
     } else {
       inchForward();
       return;
-    }
+    }*/
   } else {
     if (currentPathState == START) {
       stopLeftInstances--;
@@ -367,7 +410,7 @@ void executePreferRightLineRider() {
 }
 
 void executeRideTheRightLineRider() {
-  if ((!leftIr.isBlack || rightIr.isBlack) && (millis_32() & 0x01 == 0x01)) {
+  if ((!leftIr.isBlack || rightIr.isBlack) && (millis_32() % 8 == 0)) {
     moveRight();
   }
   if (centerIr.isBlack && !rightIr.isBlack) {
@@ -418,16 +461,19 @@ void executeVeerRightLineRider() {
 
 
 void executeStateMachine() {
+  if (lastStateChange == 0) {
+    lastStateChange = millis_32();
+  }
   checkpointDetector();
   switch (currentPathState) {
     case START:
       executeDefaultLineRider();
-      if (millis_32() - 23000 > lastStateChange) {
+      if (millis_32() - STAGE_ONE_TIME > lastStateChange) {
         advanceState(CHECKPOINT_ONE);
       }
       break;
     case CHECKPOINT_ONE:
-      executePreferRightLineRider();
+      executeDefaultLineRider();
       break;
     case CHECKPOINT_TWO:
       executePreferRightLineRider();

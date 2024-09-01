@@ -6,9 +6,12 @@
 #define PIN_IR_RIGHT 6
 #define PIN_HALL_EFFECT_LEFT 7
 #define PIN_HALL_EFFECT_RIGHT 8
-#define PIN_LASER_POWER 10
 #define PIN_MOTOR_LEFT 9
 #define PIN_MOTOR_RIGHT 3
+#define PIN_RED 12
+#define PIN_GREEN 11
+#define PIN_BLUE 10
+
 // Analog pins.
 #define PIN_LASER_READER 0
 
@@ -22,7 +25,7 @@
 // Motor constants.
 #define SERVO_CENTER 1520
 // Temporarily gate range to safer numbers:
-#define SERVO_FORWARD_MULTIPLIER 0.24
+#define SERVO_FORWARD_MULTIPLIER 0.18
 #define SERVO_REVERSE_MULTIPLIER 0.24
 #define SERVO_FULL_REVERSE -520.0  // 1000-1520
 #define SERVO_FULL_FORWARD 480.0   // 2000-1520
@@ -30,12 +33,11 @@
 #define DEBUG_WRITE_SAMPLE_RATE 1000
 #define CONTROLLER_SAMPLE_RATE 1
 
-#define STAGE_ONE_TIME 24.58*1000
+#define STAGE_ONE_TIME 24.58 * 1000
 
 // Define State Machine.
 enum PathState {
   START,
-  WOOD_HANDLER,
   CHECKPOINT_ONE,
   CHECKPOINT_TWO,
   BROOM_STICK_ABYSS,
