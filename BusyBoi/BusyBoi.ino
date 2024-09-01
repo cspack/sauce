@@ -169,14 +169,16 @@ void printDebugUpdate() {
   Serial.println(rightWheel.countTicks(now, 1000));
   */
 }
-
+bool goSlow() {
+  return millis_32() - lastInch < WAS_JUST_GOING_SLOW;
+}
 void moveStop() {
   Serial.println("GO STOP!");
   wheelSetSpeed(leftWheel, 0.0);
   wheelSetSpeed(rightWheel, 0.0);
 };
 void moveLeft() {
-  if (millis_32() - lastInch < WAS_JUST_GOING_SLOW) {
+  if (goSlow()) {
     wheelSetSpeed(leftWheel, -0.3);
     wheelSetSpeed(rightWheel, 0.3);
     return;
@@ -186,7 +188,7 @@ void moveLeft() {
   wheelSetSpeed(rightWheel, 0.5);
 };
 void moveRight() {
-  if (millis_32() - lastInch < WAS_JUST_GOING_SLOW) {
+  if (goSlow()) {
     wheelSetSpeed(leftWheel, 0.3);
     wheelSetSpeed(rightWheel, -0.3);
     return;
@@ -198,20 +200,30 @@ void moveRight() {
 
 void moveTightLeft() {
   Serial.println("GO TIGHT LEFT!");
+  if (goSlow()) {
+      wheelSetSpeed(leftWheel, -0.8);
+      wheelSetSpeed(rightWheel, 0.15);
+      return;
+  }
   wheelSetSpeed(leftWheel, -1.0);
   wheelSetSpeed(rightWheel, 0.2);
 };
 void moveTightRight() {
   Serial.println("GO TIGHT RIGHT!");
+  if (goSlow()) {
+      wheelSetSpeed(leftWheel, 0.15);
+      wheelSetSpeed(rightWheel, -0.8);
+      return;
+  }
   wheelSetSpeed(leftWheel, 0.2);
   wheelSetSpeed(rightWheel, -1.0);
 };
-void inchForward() {
-  lastInch = millis_32();
-  wheelSetSpeed(leftWheel, 0.3);
-  wheelSetSpeed(rightWheel, 0.3);
-}
 void moveForward() {
+  if (goSlow()) {
+    wheelSetSpeed(leftWheel, 0.3);
+    wheelSetSpeed(rightWheel, 0.3);
+    return;
+  }
   // Serial.println("GO FORWARD!");
   wheelSetSpeed(leftWheel, 0.5);
   wheelSetSpeed(rightWheel, 0.5);
@@ -225,18 +237,20 @@ bool isInHeaven() {
   return (!rightIr.isBlack && !leftIr.isBlack && !centerIr.isBlack);
 }
 
+bool isOnTheLine() {
+  // donny wtf.
+  return (!rightIr.isBlack && !leftIr.isBlack && centerIr.isBlack);
+}
+
 void writeRgb(bool red, bool green, bool blue) {
   digitalWrite(PIN_RED, red ? HIGH : LOW);
   digitalWrite(PIN_GREEN, green ? HIGH : LOW);
   digitalWrite(PIN_BLUE, blue ? HIGH : LOW);
 }
 
-bool isOnTheLine() {
-  return (!rightIr.isBlack && !leftIr.isBlack && centerIr.isBlack);
-}
 uint32_t enteredCheckpoint = 0;
 
-#define MINIMUM_STATE_WAIT 6000
+#define MINIMUM_STATE_WAIT 4000
 uint32_t lastStateChange = 0;
 void advanceState(PathState newState, int waitTime = MINIMUM_STATE_WAIT) {
 
@@ -286,8 +300,8 @@ void advanceState(PathState newState, int waitTime = MINIMUM_STATE_WAIT) {
   }
 }
 
-#define CHECKPOINT_ONE_CROSS_WAIT_TIME 6
-#define CHECKPOINT_TWO_CROSS_WAIT_TIME 6
+#define CHECKPOINT_ONE_CROSS_WAIT_TIME 20
+#define CHECKPOINT_TWO_CROSS_WAIT_TIME 20
 void checkpointDetector() {
   if (currentPathState == START) {
     if (isAtACrossRoad()) {
@@ -338,12 +352,21 @@ void checkpointDetector() {
       advanceState(EXIT_TO_THE_RAMP, 1000);
     }
   }
+  if (currentPathState == EXIT_TO_THE_RAMP) {
+    if (isOnTheLine()) {
+      // Allow fast advance because this is a quick process.
+      advanceState(DO_A_FLIP, 1000);
+    }
+  }
 }
 
 #define STOP_LEFT_FRAMES_NEEDED 3
 int stopLeftInstances = 0;
 int stopLeftFrames = 0;
 void checkAdvance() {
+  if (currentPathState != START && currentPathState != CHECKPOINT_ONE) {
+    return;
+  }
   stopLeftFrames++;
   if (stopLeftFrames >= STOP_LEFT_FRAMES_NEEDED) {
     stopLeftInstances++;
@@ -357,18 +380,17 @@ void checkAdvance() {
 void executeDefaultLineRider() {
   uint32_t now = millis_32();
   if (rightIr.isBlack && leftIr.isBlack) {
-    //if (currentPathState == START) {
+    // Hey, It works.
+      lastInch = now;
       moveStop();
       moveLeft();
       checkAdvance();
       return;
-    /*} else {
-      inchForward();
-      return;
-    }*/
   } else {
     if (currentPathState == START) {
-      stopLeftInstances--;
+      stopLeftInstances = stopLeftInstances--;
+      // i know. i know.
+      if (stopLeftInstances < 0) { stopLeftInstances = 0; }
     }
   }
   if (leftIr.isBlack) {
@@ -383,19 +405,19 @@ void executeDefaultLineRider() {
 }
 
 void executePreferRightLineRider() {
+  uint32_t now = millis_32();
   if (rightIr.isBlack && leftIr.isBlack) {
-    //if (currentPathState == START) {
+      // Hey, It works.
+      lastInch = now;
       moveStop();
       moveRight();
       checkAdvance();
-      return;/*
-    } else {
-      inchForward();
       return;
-    }*/
   } else {
     if (currentPathState == START) {
       stopLeftInstances--;
+      // i know. i know.
+      if (stopLeftInstances < 0) { stopLeftInstances = 0; }
     }
   }
   if (rightIr.isBlack) {
@@ -410,13 +432,11 @@ void executePreferRightLineRider() {
 }
 
 void executeRideTheRightLineRider() {
+  /*
   if ((!leftIr.isBlack || rightIr.isBlack) && (millis_32() % 8 == 0)) {
     moveRight();
   }
-  if (centerIr.isBlack && !rightIr.isBlack) {
-    moveLeft();
-    return;
-  }
+  */
   if (rightIr.isBlack) {
     moveRight();
     return;
@@ -430,6 +450,10 @@ void executeRideTheRightLineRider() {
 void executeVeerLeftLineRider() {
   if (rightIr.isBlack && leftIr.isBlack) {
     moveTightLeft();
+    return;
+  }
+  if (centerIr.isBlack && leftIr.isBlack) {
+    moveLeft();
     return;
   }
   if (leftIr.isBlack) {
@@ -447,6 +471,10 @@ void executeVeerRightLineRider() {
     moveTightRight();
     return;
   }
+  if (centerIr.isBlack && rightIr.isBlack) {
+    moveRight();
+    return;
+  }
   if (rightIr.isBlack) {
     moveTightRight();
     return;
@@ -457,7 +485,6 @@ void executeVeerRightLineRider() {
   }
   moveForward();
 }
-
 
 
 void executeStateMachine() {
@@ -507,7 +534,7 @@ void refreshSensors() {
 void loop() {
   refreshSensors();
 
-  uint32_t now = millis() & 0xFFFFFFFF;
+  uint32_t now = millis_32();
   if ((now - lastExecTime) >= CONTROLLER_SAMPLE_RATE) {
     int timeSinceStart = now - lastExecTime;
     executeStateMachine();
