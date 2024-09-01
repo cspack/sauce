@@ -128,7 +128,8 @@ void executeDefaultLineRider() {
 void executeStateMachine() {
   switch (currentPathState) {
     default:
-      
+    executeDefaultLineRider();
+    break;
   }
 }
 
