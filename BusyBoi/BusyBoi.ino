@@ -14,6 +14,10 @@ InfraredWrapper rightIr;
 // The last time that a Serial.print was made:
 uint32_t lastPrintTime = 0;
 uint32_t lastExecTime = 0;
+// The last time the user went slow because scared of the dark.
+uint32_t lastInch = 0;
+// How long we slow turning after last inching
+#define WAS_JUST_GOING_SLOW 2000
 
 bool disableMotors() {
   return false;
@@ -170,11 +174,21 @@ void moveStop() {
   wheelSetSpeed(rightWheel, 0.0);
 };
 void moveLeft() {
+  if (millis_32() - lastInch < WAS_JUST_GOING_SLOW) {
+    wheelSetSpeed(leftWheel, -0.3);
+    wheelSetSpeed(rightWheel, 0.3);
+    return;
+  }
   // Serial.println("GO LEFT!");
   wheelSetSpeed(leftWheel, -0.5);
   wheelSetSpeed(rightWheel, 0.5);
 };
 void moveRight() {
+  if (millis_32() - lastInch < WAS_JUST_GOING_SLOW) {
+    wheelSetSpeed(leftWheel, 0.3);
+    wheelSetSpeed(rightWheel, -0.3);
+    return;
+  }
   // Serial.println("GO RIGHT!");
   wheelSetSpeed(leftWheel, 0.5);
   wheelSetSpeed(rightWheel, -0.5);
@@ -191,27 +205,46 @@ void moveTightRight() {
   wheelSetSpeed(rightWheel, -1.0);
 };
 void inchForward() {
+  lastInch = millis_32();
   wheelSetSpeed(leftWheel, 0.3);
   wheelSetSpeed(rightWheel, 0.3);
 }
 void moveForward() {
   // Serial.println("GO FORWARD!");
-  wheelSetSpeed(leftWheel, 0.6);
-  wheelSetSpeed(rightWheel, 0.6);
+  wheelSetSpeed(leftWheel, 0.4);
+  wheelSetSpeed(rightWheel, 0.4);
 };
 
 bool isAtACrossRoad() {
   return (rightIr.isBlack && leftIr.isBlack && centerIr.isBlack);
 }
 
-bool isInTheVoid() {
+bool isInHeaven() {
   return (!rightIr.isBlack && !leftIr.isBlack && !centerIr.isBlack);
+}
+
+
+bool isOnTheLine() {
+  return (!rightIr.isBlack && !leftIr.isBlack && centerIr.isBlack);
 }
 uint32_t enteredCheckpoint = 0;
 
-#define CHECKPOINT_ONE_CROSS_WAIT_TIME 20
-#define CHECKPOINT_TWO_CROSS_WAIT_TIME 20
-#define THE_VOID_WAIT_TIME 20
+#define MINIMUM_STATE_WAIT 6000
+uint32_t lastStateChange = 0;
+void advanceState(PathState newState, int waitTime = MINIMUM_STATE_WAIT) {
+  int32_t now = millis_32();
+  if (now - waitTime > lastStateChange) {
+    Serial.print("STATE CHANGE: ");
+    Serial.println(newState);
+    lastStateChange = millis_32();
+    currentPathState = newState;
+    moveStop();
+    delay(1000);
+  }
+}
+
+#define CHECKPOINT_ONE_CROSS_WAIT_TIME 6
+#define CHECKPOINT_TWO_CROSS_WAIT_TIME 6
 void checkpointDetector() {
   if (currentPathState == START) {
     if (isAtACrossRoad()) {
@@ -223,10 +256,7 @@ void checkpointDetector() {
     } else {
       // Evaluate wether hit checkpoint when LEFT the crossroad.
       if (millis_32() - enteredCheckpoint >= CHECKPOINT_ONE_CROSS_WAIT_TIME) {
-        Serial.println("STATE CHANGE: CHECKPOINT_ONE");
-        currentPathState = CHECKPOINT_ONE;
-        moveStop();
-        delay(1000);
+        advanceState(CHECKPOINT_ONE);
       }
       // Reset.
       enteredCheckpoint = 0;
@@ -243,42 +273,60 @@ void checkpointDetector() {
     } else {
       // Evaluate wether hit checkpoint when LEFT the crossroad.
       if (millis_32() - enteredCheckpoint >= CHECKPOINT_TWO_CROSS_WAIT_TIME) {
-        Serial.println("STATE CHANGE: CHECKPOINT_TWO");
-        currentPathState = CHECKPOINT_TWO;
-        moveStop();
-        delay(1000);
+        advanceState(CHECKPOINT_TWO);
       }
       // Reset.
       enteredCheckpoint = 0;
     }
   }
   if (currentPathState == CHECKPOINT_TWO) {
-    if (isInTheVoid()) {
-      Serial.println("STATE CHANGE: BROOM_STICK_ABYSS");
-      currentPathState = BROOM_STICK_ABYSS;
-      moveStop();
-      delay(1000);
+    if (isInHeaven()) {
+      advanceState(BROOM_STICK_ABYSS);
     }
   }
   if (currentPathState == BROOM_STICK_ABYSS) {
-    if (!isInTheVoid()) {
-      Serial.println("STATE CHANGE: EXIT_TO_THE_RAMP");
-      currentPathState = EXIT_TO_THE_RAMP;
-      moveStop();
-      delay(1000);
-
+    if (!isInHeaven()) {
+      advanceState(GET_ON_THE_LINE);
+    }
+  }
+  if (currentPathState == GET_ON_THE_LINE) {
+    if (isOnTheLine()) {
+      // Allow fast advance because this is a quick process.
+      advanceState(EXIT_TO_THE_RAMP, 1000);
     }
   }
 }
 
+#define STOP_LEFT_FRAMES_NEEDED 3
+int stopLeftInstances = 0;
+int stopLeftFrames = 0;
+void checkAdvance() {
+  stopLeftFrames++;
+  if (stopLeftFrames >= STOP_LEFT_FRAMES_NEEDED) {
+    stopLeftInstances++;
+    stopLeftFrames = 0;
+  }
+  if (stopLeftInstances >= 2) {
+    advanceState(CHECKPOINT_TWO);
+  }
+}
+
 void executeDefaultLineRider() {
+  uint32_t now = millis_32();
   if (rightIr.isBlack && leftIr.isBlack) {
-    if (centerIr.isBlack) {
-      moveForward();
+    if (currentPathState == START) {
+      moveStop();
+      moveLeft();
+      checkAdvance();
+      return;
     } else {
       inchForward();
+      return;
     }
-    return;
+  } else {
+    if (currentPathState == START) {
+      stopLeftInstances--;
+    }
   }
   if (leftIr.isBlack) {
     moveLeft();
@@ -291,8 +339,23 @@ void executeDefaultLineRider() {
   moveForward();
 }
 
-void executeRideTheLeftLineRider() {
-  if (centerIr.isBlack && leftIr.isBlack) {
+void executePreferRightLineRider() {
+  if (rightIr.isBlack && leftIr.isBlack) {
+    if (currentPathState == START) {
+      moveStop();
+      moveRight();
+      checkAdvance();
+      return;
+    } else {
+      inchForward();
+      return;
+    }
+  } else {
+    if (currentPathState == START) {
+      stopLeftInstances--;
+    }
+  }
+  if (rightIr.isBlack) {
     moveRight();
     return;
   }
@@ -300,13 +363,27 @@ void executeRideTheLeftLineRider() {
     moveLeft();
     return;
   }
-  if (centerIr.isBlack) {
+  moveForward();
+}
+
+void executeRideTheRightLineRider() {
+  if ((!leftIr.isBlack || rightIr.isBlack) && (millis_32() & 0x01 == 0x01)) {
     moveRight();
+  }
+  if (centerIr.isBlack && !rightIr.isBlack) {
+    moveLeft();
+    return;
+  }
+  if (rightIr.isBlack) {
+    moveRight();
+    return;
+  }
+  if (centerIr.isBlack) {
+    moveLeft();
     return;
   }
   moveForward();
 }
-
 void executeVeerLeftLineRider() {
   if (rightIr.isBlack && leftIr.isBlack) {
     moveTightLeft();
@@ -338,18 +415,38 @@ void executeVeerRightLineRider() {
   moveForward();
 }
 
+
+
 void executeStateMachine() {
+  checkpointDetector();
   switch (currentPathState) {
+    case START:
+      executeDefaultLineRider();
+      if (millis_32() - 23000 > lastStateChange) {
+        advanceState(CHECKPOINT_ONE);
+      }
+      break;
     case CHECKPOINT_ONE:
-      executeVeerRightLineRider();
+      executePreferRightLineRider();
       break;
     case CHECKPOINT_TWO:
-      executeRideTheLeftLineRider();
+      executePreferRightLineRider();
       break;
     case BROOM_STICK_ABYSS:
       executeVeerRightLineRider();
+      break;
+    case GET_ON_THE_LINE:
+      executePreferRightLineRider();
+      break;
     case EXIT_TO_THE_RAMP:
       executeVeerLeftLineRider();
+      if (millis_32() - 2000 > lastStateChange) {
+        advanceState(DO_A_FLIP);
+      }
+      break;
+    case DO_A_FLIP:
+      executeDefaultLineRider();
+      break;
     default:
       executeDefaultLineRider();
   }

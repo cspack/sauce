@@ -22,8 +22,8 @@
 // Motor constants.
 #define SERVO_CENTER 1520
 // Temporarily gate range to safer numbers:
-#define SERVO_FORWARD_MULTIPLIER 0.22
-#define SERVO_REVERSE_MULTIPLIER 0.22
+#define SERVO_FORWARD_MULTIPLIER 0.24
+#define SERVO_REVERSE_MULTIPLIER 0.24
 #define SERVO_FULL_REVERSE -520.0  // 1000-1520
 #define SERVO_FULL_FORWARD 480.0   // 2000-1520
 
@@ -35,9 +35,11 @@
 // Define State Machine.
 enum PathState {
   START,
+  WOOD_HANDLER,
   CHECKPOINT_ONE,
   CHECKPOINT_TWO,
   BROOM_STICK_ABYSS,
+  GET_ON_THE_LINE,
   EXIT_TO_THE_RAMP,
   DO_A_FLIP,
   FIND_THE_LINE,
