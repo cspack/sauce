@@ -1,3 +1,6 @@
+#include <Servo.h>
+
+
 // Digital pins.
 #define PIN_IR_LEFT 4
 #define PIN_IR_CENTER 5
@@ -13,7 +16,7 @@
 // Configs.
 #define ROTATIONS_COLLECTED 100
 
-// State Machine
+// Define State Machine.
 enum PathState {
   START,
   CHECKPOINT_ONE,
@@ -28,17 +31,29 @@ enum PathState {
   INVERTED_CUP_RIGHT,
   FINISH
 };
-
 PathState currentPathState = START;
 
+// Motor Setup ------------------
+Servo lMotor; 
+Servo rMotor; 
+
+// Debug printer:
+// The last time that a Serial.print was made.
 uint64_t lastTime = 0;
 
+// Wheel data container.
 struct Wheel {
+  // Revolution collector:
+  // The collection of timestamps of last revolutions.
   uint64_t ticks[ROTATIONS_COLLECTED];
+  // The position to insert the next revolution.
   int index = 0;
+  // The global revolutions for this motor since reset.
   int tickCount = 0;
+  // Motor controller.
+  Servo servo;
 
-  void recordTick(void) {
+  void recordTick() {
     tickCount++;
     ticks[index] = millis();
     index = (++index) % ROTATIONS_COLLECTED;
@@ -74,33 +89,45 @@ struct Wheel {
   }
 };
 
-void initWheel(Wheel wheel) {
+void initWheel(Wheel wheel, int pin_servo, int pin_hall_effect) {
+  // Setup Struct.
   wheel.index = 0;
   wheel.tickCount = 0;
   for (int i = 0; i < sizeof(wheel.ticks); i++) wheel.ticks[i] = -1;
+
+  // Attach servo monitor.
+  wheel.servo.attach(pin_servo);
 }
 Wheel left;
 Wheel right;
 
-void leftInterrupt() {
+void recieveHallEffectLeft() {
   left.recordTick();
 }
 
-void rightInterrupt() {
+void recieveHallEffectRight() {
   right.recordTick();
 }
 
 void setup() {
-  initWheel(left);
-  initWheel(right);
+  // Set up wheel servos.
+  initWheel(left, PIN_MOTOR_LEFT, PIN_HALL_EFFECT_LEFT);
+  initWheel(right, PIN_MOTOR_RIGHT, PIN_HALL_EFFECT_RIGHT);
+
+  // Set up IR sensors.
+  pinMode(PIN_IR_LEFT, INPUT);
+  pinMode(PIN_IR_CENTER, INPUT);
+  pinMode(PIN_IR_RIGHT, INPUT);
+
+  // Set up the Hall Effect Sensors.
+  pinMode(PIN_HALL_EFFECT_LEFT, INPUT);
+  pinMode(PIN_HALL_EFFECT_RIGHT, INPUT);
+  // Attach hall effect sensor.
+  attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_LEFT), recieveHallEffectLeft, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_RIGHT), recieveHallEffectRight, FALLING);
 
   Serial.begin(9600);
   Serial.println("Let's go!");
-
-  // Set up the Hall effect sensor pin.
-  pinMode(PIN_HALL_EFFECT_LEFT, INPUT);
-
-  attachInterrupt(digitalPinToInterrupt(PIN_HALL_EFFECT_LEFT), leftInterrupt, FALLING);
 }
 
 // AI told me this is how I print a uint64.
