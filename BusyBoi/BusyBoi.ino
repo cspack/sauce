@@ -228,8 +228,10 @@ bool isAtACrossRoad() {
   return (rightIr.isBlack && leftIr.isBlack && centerIr.isBlack);
 }
 
+bool wasInHeaven = false;
 bool isInHeaven() {
-  return (!rightIr.isBlack && !leftIr.isBlack && !centerIr.isBlack);
+  wasInHeaven = (!rightIr.isBlack && !leftIr.isBlack && !centerIr.isBlack);
+  return wasInHeaven;
 }
 
 bool isOnTheLine() {
@@ -355,7 +357,7 @@ void checkpointDetector() {
     } else {
       // Evaluate wether hit checkpoint when LEFT the crossroad.
       if (millis_32() - enteredCheckpoint >= CHECKPOINT_TWO_CROSS_WAIT_TIME) {
-        advanceState(CHECKPOINT_TWO);
+        advanceState(CHECKPOINT_TWO, 3000);
       }
       // Reset.
       enteredCheckpoint = 0;
@@ -364,23 +366,25 @@ void checkpointDetector() {
   
   if (currentPathState == CHECKPOINT_TWO) {
     if (isReadyForHeaven()) {
-      advanceState(BROOM_STICK_ABYSS, 30000);
+      advanceState(BROOM_STICK_ABYSS, 15000);
       resetTheAbyss();
     }
   }
   if (currentPathState == BROOM_STICK_ABYSS) {
     if (!isReadyForLine()) {
       advanceState(GET_ON_THE_LINE, 5000);
+      wasInHeaven = false;
     }
   }
   if (currentPathState == GET_ON_THE_LINE) {
-    if (isOnTheLine()) {
+    if (!isInHeaven() && wasInHeaven) {
       // Allow fast advance because this is a quick process.
       advanceState(EXIT_TO_THE_RAMP, 1000);
+      wasInHeaven = false;
     }
   }
   if (currentPathState == EXIT_TO_THE_RAMP) {
-    if (isOnTheLine()) {
+    if (!isInHeaven() && wasInHeaven) {
       // Allow fast advance because this is a quick process.
       advanceState(DO_A_FLIP, 1000);
     }
